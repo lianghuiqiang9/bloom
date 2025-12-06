@@ -13,7 +13,7 @@
 
 #define ELEMENTS 50000
 #define FALSE_POSITIVE_RATE 0.05
-#define KEY_LEN 10
+#define KEY_LEN 32
 
 #define KNRM  "\x1B[0m"
 #define KRED  "\x1B[31m"

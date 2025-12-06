@@ -20,6 +20,7 @@
 #include <unistd.h>         /* close */
 #include "bloom.h"
 
+typedef char* caddr_t;
 
 #define CHECK_BIT_CHAR(c, k)  ((c) & (1 << (k)))
 #define CHECK_BIT(A, k)       (CHECK_BIT_CHAR(A[((k) / 8)], ((k) % 8)))
@@ -46,10 +47,10 @@ static uint64_t* __default_hash(int num_hashes, const char *str);
 static uint64_t __fnv_1a(const char *key, int seed);
 static void __calculate_optimal_hashes(BloomFilter *bf);
 static void __read_from_file(BloomFilter *bf, FILE *fp, short on_disk, const char *filename);
-static void __write_to_file(BloomFilter *bf, FILE *fp, short on_disk);
+static void __write_to_file(const BloomFilter *bf, FILE *fp, short on_disk);
 static void __update_elements_added_on_disk(BloomFilter *bf);
 static int __sum_bits_set_char(unsigned char c);
-static int __check_if_union_or_intersection_ok(BloomFilter *res, BloomFilter *bf1, BloomFilter *bf2);
+static int __check_if_union_or_intersection_ok(const BloomFilter *res, const BloomFilter *bf1, const BloomFilter *bf2);
 
 
 int bloom_filter_init_alt(BloomFilter *bf, uint64_t estimated_elements, float false_positive_rate, BloomHashFunction hash_function) {
@@ -119,7 +120,7 @@ int bloom_filter_clear(BloomFilter *bf) {
     return BLOOM_SUCCESS;
 }
 
-void bloom_filter_stats(BloomFilter *bf) {
+void bloom_filter_stats(const BloomFilter *bf) {
     const char *is_on_disk = (bf->__is_on_disk == 0 ? "no" : "yes");
     uint64_t size_on_disk = bloom_filter_export_size(bf);
 
@@ -150,19 +151,19 @@ int bloom_filter_add_string(BloomFilter *bf, const char *str) {
 }
 
 
-int bloom_filter_check_string(BloomFilter *bf, const char *str) {
+int bloom_filter_check_string(const BloomFilter *bf, const char *str) {
     uint64_t *hashes = bloom_filter_calculate_hashes(bf, str, bf->number_hashes);
     int res = bloom_filter_check_string_alt(bf, hashes, bf->number_hashes);
     free(hashes);
     return res;
 }
 
-uint64_t* bloom_filter_calculate_hashes(BloomFilter *bf, const char *str, unsigned int number_hashes) {
+uint64_t* bloom_filter_calculate_hashes(const BloomFilter *bf, const char *str, unsigned int number_hashes) {
     return bf->hash_function(number_hashes, str);
 }
 
 /* Add a string to a bloom filter using the defined hashes */
-int bloom_filter_add_string_alt(BloomFilter *bf, uint64_t *hashes, unsigned int number_hashes_passed) {
+int bloom_filter_add_string_alt(BloomFilter *bf, const uint64_t *hashes, unsigned int number_hashes_passed) {
     if (number_hashes_passed < bf->number_hashes) {
         fprintf(stderr, "Error: not enough hashes passed in to correctly check!\n");
         return BLOOM_FAILURE;
@@ -183,7 +184,7 @@ int bloom_filter_add_string_alt(BloomFilter *bf, uint64_t *hashes, unsigned int 
 }
 
 /* Check if a string is in the bloom filter using the passed hashes */
-int bloom_filter_check_string_alt(BloomFilter *bf, uint64_t *hashes, unsigned int number_hashes_passed) {
+int bloom_filter_check_string_alt(const BloomFilter *bf, const uint64_t *hashes, unsigned int number_hashes_passed) {
     if (number_hashes_passed < bf->number_hashes) {
         fprintf(stderr, "Error: not enough hashes passed in to correctly check!\n");
         return BLOOM_FAILURE;
@@ -201,14 +202,14 @@ int bloom_filter_check_string_alt(BloomFilter *bf, uint64_t *hashes, unsigned in
     return r;
 }
 
-float bloom_filter_current_false_positive_rate(BloomFilter *bf) {
+float bloom_filter_current_false_positive_rate(const BloomFilter *bf) {
     int num = bf->number_hashes * bf->elements_added;
     double d = -num / (float) bf->number_bits;
     double e = exp(d);
     return pow((1 - e), bf->number_hashes);
 }
 
-int bloom_filter_export(BloomFilter *bf, const char *filepath) {
+int bloom_filter_export(const BloomFilter *bf, const char *filepath) {
     // if the bloom is initialized on disk, no need to export it
     if (bf->__is_on_disk == 1) {
         return BLOOM_SUCCESS;
@@ -251,7 +252,7 @@ int bloom_filter_import_on_disk_alt(BloomFilter *bf, const char *filepath, Bloom
     return BLOOM_SUCCESS;
 }
 
-char* bloom_filter_export_hex_string(BloomFilter *bf) {
+char* bloom_filter_export_hex_string(const BloomFilter *bf) {
     uint64_t i, bytes = sizeof(uint64_t) * 2 + sizeof(float) + (bf->bloom_length);
     char* hex = (char*)calloc((bytes * 2 + 1), sizeof(char));
     for (i = 0; i < bf->bloom_length; ++i) {
@@ -302,11 +303,11 @@ int bloom_filter_import_hex_string_alt(BloomFilter *bf, const char *hex, BloomHa
     return BLOOM_SUCCESS;
 }
 
-uint64_t bloom_filter_export_size(BloomFilter *bf) {
+uint64_t bloom_filter_export_size(const BloomFilter *bf) {
     return (uint64_t)(bf->bloom_length * sizeof(unsigned char)) + (2 * sizeof(uint64_t)) + sizeof(float);
 }
 
-uint64_t bloom_filter_count_set_bits(BloomFilter *bf) {
+uint64_t bloom_filter_count_set_bits(const BloomFilter *bf) {
     uint64_t i, res = 0;
     for (i = 0; i < bf->bloom_length; ++i) {
         res += __sum_bits_set_char(bf->bloom[i]);
@@ -314,7 +315,7 @@ uint64_t bloom_filter_count_set_bits(BloomFilter *bf) {
     return res;
 }
 
-uint64_t bloom_filter_estimate_elements(BloomFilter *bf) {
+uint64_t bloom_filter_estimate_elements(const BloomFilter *bf) {
     return bloom_filter_estimate_elements_by_values(bf->number_bits, bloom_filter_count_set_bits(bf), bf->number_hashes);
 }
 
@@ -337,7 +338,7 @@ int bloom_filter_union(BloomFilter *res, BloomFilter *bf1, BloomFilter *bf2) {
     return BLOOM_SUCCESS;
 }
 
-uint64_t bloom_filter_count_union_bits_set(BloomFilter *bf1, BloomFilter *bf2) {
+uint64_t bloom_filter_count_union_bits_set(const BloomFilter *bf1, const BloomFilter *bf2) {
     // Ensure the bloom filters can be unioned
     if (__check_if_union_or_intersection_ok(bf1, bf1, bf2) == BLOOM_FAILURE) {  // use bf1 as res
         return BLOOM_FAILURE;
@@ -367,7 +368,7 @@ void bloom_filter_set_elements_to_estimated(BloomFilter *bf) {
     __update_elements_added_on_disk(bf);
 }
 
-uint64_t bloom_filter_count_intersection_bits_set(BloomFilter *bf1, BloomFilter *bf2) {
+uint64_t bloom_filter_count_intersection_bits_set(const BloomFilter *bf1, const BloomFilter *bf2) {
     // Ensure the bloom filters can be used in an intersection
     if (__check_if_union_or_intersection_ok(bf1, bf1, bf2) == BLOOM_FAILURE) {  // use bf1 as res
         return BLOOM_FAILURE;
@@ -379,7 +380,7 @@ uint64_t bloom_filter_count_intersection_bits_set(BloomFilter *bf1, BloomFilter 
     return res;
 }
 
-float bloom_filter_jaccard_index(BloomFilter *bf1, BloomFilter *bf2) {
+float bloom_filter_jaccard_index(const BloomFilter *bf1, const BloomFilter *bf2) {
     // Ensure the bloom filters can be used in an intersection and union
     if (__check_if_union_or_intersection_ok(bf1, bf1, bf2) == BLOOM_FAILURE) {  // use bf1 as res
         return (float)BLOOM_FAILURE;
@@ -411,7 +412,7 @@ static int __sum_bits_set_char(unsigned char c) {
     return bits_set_table[c];
 }
 
-static int __check_if_union_or_intersection_ok(BloomFilter *res, BloomFilter *bf1, BloomFilter *bf2) {
+static int __check_if_union_or_intersection_ok(const BloomFilter *res, const BloomFilter *bf1, const BloomFilter *bf2) {
     if (res->number_hashes != bf1->number_hashes || bf1->number_hashes != bf2->number_hashes) {
         return BLOOM_FAILURE;
     } else if (res->number_bits != bf1->number_bits || bf1->number_bits != bf2->number_bits) {
@@ -423,7 +424,7 @@ static int __check_if_union_or_intersection_ok(BloomFilter *res, BloomFilter *bf
 }
 
 /* NOTE: this assumes that the file handler is open and ready to use */
-static void __write_to_file(BloomFilter *bf, FILE *fp, short on_disk) {
+static void __write_to_file(const BloomFilter *bf, FILE *fp, short on_disk) {
     if (on_disk == 0) {
         fwrite(bf->bloom, bf->bloom_length, 1, fp);
     } else {
