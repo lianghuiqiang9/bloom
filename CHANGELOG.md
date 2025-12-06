@@ -1,5 +1,9 @@
 # Bloom Filter
 
+### Version 1.9.1
+* Improved use of `const` keyword
+* Minor updates
+
 ### Version 1.9.0
 * ***BACKWARD INCOMPATIBLE CHANGES***
     * **NOTE:** Breaks backwards compatibility with previously exported blooms using the default hash!
